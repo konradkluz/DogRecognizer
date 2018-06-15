@@ -3,6 +3,8 @@ package com.konradkluz.dogrecognizer.ui
 import android.arch.lifecycle.ViewModelProviders
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
 import android.media.ImageReader
@@ -11,8 +13,11 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.support.v4.app.ActivityCompat
 import android.support.v4.app.Fragment
+import android.util.Log
 import android.util.Size
 import android.view.*
+import android.widget.ImageButton
+import android.widget.ImageView
 import com.konradkluz.dogrecognizer.R
 import com.konradkluz.dogrecognizer.viewmodel.CameraViewModel
 import java.util.*
@@ -22,9 +27,13 @@ class CameraFragment : Fragment() {
 
     companion object {
         private const val PERMISSIONS_REQUEST_CODE = 1
+        private const val LOG_TAG = "CAMERA FRAGMENT"
     }
 
     // region fields
+
+    private lateinit var textureView: TextureView
+    private lateinit var recogniseButton: ImageButton
 
     private var cameraId: String = ""
     private var imageReader: ImageReader? = null
@@ -36,7 +45,6 @@ class CameraFragment : Fragment() {
     private lateinit var imageDimension: Size
     private lateinit var captureRequest: CaptureRequest
     private lateinit var mBackgroundHandler: Handler
-    private lateinit var textureView: TextureView
     private lateinit var cameraViewModel: CameraViewModel
 
     // endregion
@@ -57,6 +65,7 @@ class CameraFragment : Fragment() {
         textureView.let {
             it.surfaceTextureListener = textureListener
         }
+        recogniseButton = view.findViewById(R.id.recognise_button)
     }
 
     override fun onResume() {
@@ -79,6 +88,23 @@ class CameraFragment : Fragment() {
         when (requestCode) {
             PERMISSIONS_REQUEST_CODE -> if (grantResults[0] == PackageManager.PERMISSION_DENIED) activity?.finish()
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration?) {
+        super.onConfigurationChanged(newConfig)
+        val matrix = Matrix()
+        recogniseButton.scaleType = ImageView.ScaleType.MATRIX
+        when (newConfig?.orientation) {
+            Configuration.ORIENTATION_LANDSCAPE -> {
+                Log.d(LOG_TAG, "Orientation landscape")
+                matrix.postRotate(90f)
+            }
+            Configuration.ORIENTATION_PORTRAIT -> {
+                Log.d(LOG_TAG, "Orientation portrait")
+                matrix.postRotate(-90f)
+            }
+        }
+        recogniseButton.imageMatrix = matrix
     }
 
     // endregion
