@@ -1,5 +1,6 @@
-package com.konradkluz.dogrecognizer
+package com.konradkluz.dogrecognizer.ui
 
+import android.arch.lifecycle.ViewModelProviders
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.SurfaceTexture
@@ -12,26 +13,40 @@ import android.support.v4.app.ActivityCompat
 import android.support.v4.app.Fragment
 import android.util.Size
 import android.view.*
+import com.konradkluz.dogrecognizer.R
+import com.konradkluz.dogrecognizer.viewmodel.CameraViewModel
 import java.util.*
 
 
 class CameraFragment : Fragment() {
 
-    private val PERMISSIONS_REQUEST_CODE = 1
+    companion object {
+        private const val PERMISSIONS_REQUEST_CODE = 1
+    }
 
+    // region fields
 
-    private var mBackgroundThread: HandlerThread? = null
-    private lateinit var mBackgroundHandler: Handler
-    private lateinit var textureView: TextureView
     private var cameraId: String = ""
-    private lateinit var imageDimension: Size
     private var imageReader: ImageReader? = null
-
     private var cameraDevice: CameraDevice? = null
     private var captureRequestBuilder: CaptureRequest.Builder? = null
     private var cameraCaptureSession: CameraCaptureSession? = null
-    private lateinit var captureRequest: CaptureRequest
+    private var mBackgroundThread: HandlerThread? = null
 
+    private lateinit var imageDimension: Size
+    private lateinit var captureRequest: CaptureRequest
+    private lateinit var mBackgroundHandler: Handler
+    private lateinit var textureView: TextureView
+    private lateinit var cameraViewModel: CameraViewModel
+
+    // endregion
+
+    // region overrides
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        cameraViewModel = ViewModelProviders.of(this).get(CameraViewModel::class.java)
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_camera, container, false)
@@ -41,12 +56,6 @@ class CameraFragment : Fragment() {
         textureView = view.findViewById(R.id.texture)
         textureView.let {
             it.surfaceTextureListener = textureListener
-        }
-    }
-
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        when (requestCode) {
-            PERMISSIONS_REQUEST_CODE -> if (grantResults[0] == PackageManager.PERMISSION_DENIED) activity?.finish()
         }
     }
 
@@ -66,6 +75,16 @@ class CameraFragment : Fragment() {
         super.onPause()
     }
 
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        when (requestCode) {
+            PERMISSIONS_REQUEST_CODE -> if (grantResults[0] == PackageManager.PERMISSION_DENIED) activity?.finish()
+        }
+    }
+
+    // endregion
+
+    // region private methods
+
     private fun startBackgroundThread() {
         mBackgroundThread = HandlerThread("Camera Background")
         mBackgroundThread?.let {
@@ -81,6 +100,65 @@ class CameraFragment : Fragment() {
             mBackgroundThread = null
         }
     }
+
+    private fun openCamera() {
+        if (ActivityCompat.checkSelfPermission(context!!, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.CAMERA), PERMISSIONS_REQUEST_CODE)
+            return
+        }
+
+        val cameraManager: CameraManager = activity?.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        cameraId = cameraManager.cameraIdList[0]
+        val cameraCharacteristics = cameraManager.getCameraCharacteristics(cameraId)
+        val streamConfigurationMap = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+        streamConfigurationMap?.let {
+            imageDimension = streamConfigurationMap.getOutputSizes(SurfaceTexture::class.java)[0]
+            cameraManager.openCamera(cameraId, stateCallback, null)
+        }
+    }
+
+    private fun closeCamera() {
+        cameraDevice?.let {
+            it.close()
+            cameraDevice = null
+        }
+        imageReader?.let {
+            it.close()
+            imageReader = null
+        }
+    }
+
+    private fun createCameraPreview() {
+        val texture = textureView.surfaceTexture
+        texture?.let {
+            texture.setDefaultBufferSize(imageDimension.width, imageDimension.height)
+            val surface = Surface(texture)
+            captureRequestBuilder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+            captureRequestBuilder?.addTarget(surface)
+            cameraDevice?.createCaptureSession(Arrays.asList(surface), object : CameraCaptureSession.StateCallback() {
+                override fun onConfigured(session: CameraCaptureSession?) {
+                    cameraDevice?.let {
+                        cameraCaptureSession = session
+                        updatePreview()
+                    }
+                }
+
+                override fun onConfigureFailed(session: CameraCaptureSession?) {
+                }
+            }, null)
+        }
+    }
+
+    private fun updatePreview() {
+        cameraDevice?.let {
+            captureRequestBuilder?.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
+            cameraCaptureSession?.setRepeatingRequest(captureRequestBuilder?.build(), null, mBackgroundHandler)
+        }
+    }
+
+    // endregion
+
+    // region anonymous classes
 
     private val textureListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture?, width: Int, height: Int) {
@@ -121,60 +199,5 @@ class CameraFragment : Fragment() {
         }
     }
 
-    private fun openCamera() {
-        val cameraManager: CameraManager = activity?.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-        val cameraIdList = cameraManager.cameraIdList
-
-        cameraId = cameraIdList[0]
-        val cameraCharacteristics = cameraManager.getCameraCharacteristics(cameraId)
-        val streamConfigurationMap = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-        streamConfigurationMap?.let {
-            imageDimension = streamConfigurationMap.getOutputSizes(SurfaceTexture::class.java)[0]
-            if (ActivityCompat.checkSelfPermission(context!!, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(android.Manifest.permission.CAMERA), PERMISSIONS_REQUEST_CODE)
-                return
-            }
-            cameraManager.openCamera(cameraId, stateCallback, null)
-        }
-    }
-
-    private fun closeCamera() {
-        cameraDevice?.let {
-            it.close()
-            cameraDevice = null
-        }
-        imageReader?.let {
-            it.close()
-            imageReader = null
-        }
-    }
-
-    private fun createCameraPreview() {
-        val texture = textureView.surfaceTexture
-        texture?.let {
-            texture.setDefaultBufferSize(imageDimension.width, imageDimension.height)
-            val surface = Surface(texture)
-            captureRequestBuilder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-            captureRequestBuilder?.addTarget(surface)
-            cameraDevice?.createCaptureSession(Arrays.asList(surface), object : CameraCaptureSession.StateCallback() {
-                override fun onConfigured(session: CameraCaptureSession?) {
-                    cameraDevice?.let {
-                        cameraCaptureSession = session
-                        updatePreview()
-                    }
-                }
-
-                override fun onConfigureFailed(session: CameraCaptureSession?) {
-
-                }
-            }, null)
-        }
-    }
-
-    private fun updatePreview() {
-        cameraDevice?.let {
-            captureRequestBuilder?.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
-            cameraCaptureSession?.setRepeatingRequest(captureRequestBuilder?.build(), null, mBackgroundHandler)
-        }
-    }
+    // endregion
 }
