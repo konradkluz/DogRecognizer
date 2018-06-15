@@ -3,9 +3,8 @@ package com.konradkluz.dogrecognizer.ui
 import android.arch.lifecycle.ViewModelProviders
 import android.content.Context
 import android.content.pm.PackageManager
-import android.content.res.Configuration
-import android.graphics.Matrix
 import android.graphics.SurfaceTexture
+import android.hardware.SensorManager
 import android.hardware.camera2.*
 import android.media.ImageReader
 import android.os.Bundle
@@ -13,11 +12,10 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.support.v4.app.ActivityCompat
 import android.support.v4.app.Fragment
-import android.util.Log
 import android.util.Size
 import android.view.*
+import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.ImageButton
-import android.widget.ImageView
 import com.konradkluz.dogrecognizer.R
 import com.konradkluz.dogrecognizer.viewmodel.CameraViewModel
 import java.util.*
@@ -47,6 +45,8 @@ class CameraFragment : Fragment() {
     private lateinit var mBackgroundHandler: Handler
     private lateinit var cameraViewModel: CameraViewModel
 
+    private lateinit var orientationEventListener: OrientationEventListener
+
     // endregion
 
     // region overrides
@@ -54,6 +54,9 @@ class CameraFragment : Fragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         cameraViewModel = ViewModelProviders.of(this).get(CameraViewModel::class.java)
+
+        orientationEventListener =
+                MyOrientationEventListener(context, SensorManager.SENSOR_DELAY_NORMAL) { rotation: Float -> rotateButton(rotation) }
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
@@ -70,6 +73,7 @@ class CameraFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        orientationEventListener.enable()
         startBackgroundThread()
         if (textureView.isAvailable) {
             openCamera()
@@ -79,6 +83,7 @@ class CameraFragment : Fragment() {
     }
 
     override fun onPause() {
+        orientationEventListener.disable()
         closeCamera()
         stopBackgroundThread()
         super.onPause()
@@ -88,23 +93,6 @@ class CameraFragment : Fragment() {
         when (requestCode) {
             PERMISSIONS_REQUEST_CODE -> if (grantResults[0] == PackageManager.PERMISSION_DENIED) activity?.finish()
         }
-    }
-
-    override fun onConfigurationChanged(newConfig: Configuration?) {
-        super.onConfigurationChanged(newConfig)
-        val matrix = Matrix()
-        recogniseButton.scaleType = ImageView.ScaleType.MATRIX
-        when (newConfig?.orientation) {
-            Configuration.ORIENTATION_LANDSCAPE -> {
-                Log.d(LOG_TAG, "Orientation landscape")
-                matrix.postRotate(90f)
-            }
-            Configuration.ORIENTATION_PORTRAIT -> {
-                Log.d(LOG_TAG, "Orientation portrait")
-                matrix.postRotate(-90f)
-            }
-        }
-        recogniseButton.imageMatrix = matrix
     }
 
     // endregion
@@ -182,6 +170,10 @@ class CameraFragment : Fragment() {
         }
     }
 
+    private fun rotateButton(deg: Float) {
+        recogniseButton.animate().rotation(deg).interpolator = AccelerateDecelerateInterpolator()
+    }
+
     // endregion
 
     // region anonymous classes
@@ -222,6 +214,32 @@ class CameraFragment : Fragment() {
         override fun onCaptureCompleted(session: CameraCaptureSession?, request: CaptureRequest?, result: TotalCaptureResult?) {
             super.onCaptureCompleted(session, request, result)
             createCameraPreview()
+        }
+    }
+
+    // endregion
+
+    // inner class
+
+    class MyOrientationEventListener(context: Context?, rate: Int,
+                                     val action: (rotation: Float) -> Unit) : OrientationEventListener(context, rate) {
+
+        private var rotation = -1
+
+        override fun onOrientationChanged(orientation: Int) {
+            if (rotation != 1 && (orientation >= 315 || orientation <= 45)) {
+                action(0f)
+                rotation = 1
+            } else if (rotation != 2 && orientation in 46..134) {
+                action(-90f)
+                rotation = 2
+            } else if (rotation != 3 && orientation in 225..314) {
+                action(90f)
+                rotation = 3
+            } else if (rotation != 4 && orientation in 135..224) {
+                action(180f)
+                rotation = 4
+            }
         }
     }
 
