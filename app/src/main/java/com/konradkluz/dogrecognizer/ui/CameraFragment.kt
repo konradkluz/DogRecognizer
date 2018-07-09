@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.graphics.SurfaceTexture
 import android.hardware.SensorManager
 import android.hardware.camera2.*
-import android.media.ImageReader
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
@@ -25,23 +24,21 @@ class CameraFragment : Fragment() {
 
     companion object {
         private const val PERMISSIONS_REQUEST_CODE = 1
-        private const val LOG_TAG = "CAMERA FRAGMENT"
+        private const val LOG_TAG = "CameraFragment"
     }
 
     // region fields
 
     private lateinit var textureView: TextureView
-    private lateinit var recogniseButton: ImageButton
+    private lateinit var takePictureButton: ImageButton
 
     private var cameraId: String = ""
-    private var imageReader: ImageReader? = null
     private var cameraDevice: CameraDevice? = null
     private var captureRequestBuilder: CaptureRequest.Builder? = null
     private var cameraCaptureSession: CameraCaptureSession? = null
     private var mBackgroundThread: HandlerThread? = null
 
     private lateinit var imageDimension: Size
-    private lateinit var captureRequest: CaptureRequest
     private lateinit var mBackgroundHandler: Handler
     private lateinit var cameraViewModel: CameraViewModel
 
@@ -68,7 +65,10 @@ class CameraFragment : Fragment() {
         textureView.let {
             it.surfaceTextureListener = textureListener
         }
-        recogniseButton = view.findViewById(R.id.recognise_button)
+        takePictureButton = view.findViewById(R.id.take_picture_button)
+        takePictureButton.setOnClickListener {
+            takePicture()
+        }
     }
 
     override fun onResume() {
@@ -91,7 +91,10 @@ class CameraFragment : Fragment() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         when (requestCode) {
-            PERMISSIONS_REQUEST_CODE -> if (grantResults[0] == PackageManager.PERMISSION_DENIED) activity?.finish()
+            PERMISSIONS_REQUEST_CODE -> {
+                if (grantResults.any(predicate =
+                        { permission -> permission == PackageManager.PERMISSION_DENIED })) activity?.finish()
+            }
         }
     }
 
@@ -116,8 +119,9 @@ class CameraFragment : Fragment() {
     }
 
     private fun openCamera() {
-        if (ActivityCompat.checkSelfPermission(context!!, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(android.Manifest.permission.CAMERA), PERMISSIONS_REQUEST_CODE)
+        if (ActivityCompat.checkSelfPermission(context!!, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
+                ActivityCompat.checkSelfPermission(context!!, android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.CAMERA, android.Manifest.permission.WRITE_EXTERNAL_STORAGE), PERMISSIONS_REQUEST_CODE)
             return
         }
 
@@ -135,10 +139,6 @@ class CameraFragment : Fragment() {
         cameraDevice?.let {
             it.close()
             cameraDevice = null
-        }
-        imageReader?.let {
-            it.close()
-            imageReader = null
         }
     }
 
@@ -171,12 +171,35 @@ class CameraFragment : Fragment() {
     }
 
     private fun rotateButton(deg: Float) {
-        recogniseButton.animate().rotation(deg).interpolator = AccelerateDecelerateInterpolator()
+        takePictureButton.animate().rotation(deg).interpolator = AccelerateDecelerateInterpolator()
     }
 
-    // endregion
+    private fun takePicture() {
+        lock()
+        cameraViewModel.takePicture(textureView.bitmap)
+        unlock()
+    }
 
-    // region anonymous classes
+    private fun lock() {
+        try {
+            cameraCaptureSession?.capture(captureRequestBuilder?.build(), null, mBackgroundHandler)
+        } catch (e: CameraAccessException) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun unlock() {
+        try {
+            cameraCaptureSession?.setRepeatingRequest(captureRequestBuilder?.build(), null, mBackgroundHandler)
+        } catch (e: CameraAccessException) {
+            e.printStackTrace()
+        }
+    }
+
+
+// endregion
+
+// region anonymous classes
 
     private val textureListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture?, width: Int, height: Int) {
@@ -210,16 +233,9 @@ class CameraFragment : Fragment() {
         }
     }
 
-    private val captureCallbackListener = object : CameraCaptureSession.CaptureCallback() {
-        override fun onCaptureCompleted(session: CameraCaptureSession?, request: CaptureRequest?, result: TotalCaptureResult?) {
-            super.onCaptureCompleted(session, request, result)
-            createCameraPreview()
-        }
-    }
+// endregion
 
-    // endregion
-
-    // inner class
+// inner class
 
     class MyOrientationEventListener(context: Context?, rate: Int,
                                      val action: (rotation: Float) -> Unit) : OrientationEventListener(context, rate) {
@@ -243,5 +259,5 @@ class CameraFragment : Fragment() {
         }
     }
 
-    // endregion
+// endregion
 }
