@@ -13,10 +13,16 @@ import android.support.v4.app.ActivityCompat
 import android.support.v4.app.Fragment
 import android.util.Size
 import android.view.*
+import android.view.View.GONE
+import android.view.View.VISIBLE
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.ImageButton
+import android.widget.ProgressBar
+import androidx.navigation.fragment.NavHostFragment
 import com.konradkluz.dogrecognizer.R
 import com.konradkluz.dogrecognizer.viewmodel.CameraViewModel
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.schedulers.Schedulers
 import java.util.*
 
 
@@ -31,6 +37,7 @@ class CameraFragment : Fragment() {
 
     private lateinit var textureView: TextureView
     private lateinit var takePictureButton: ImageButton
+    private lateinit var progressBar: ProgressBar
 
     private var cameraId: String = ""
     private var cameraDevice: CameraDevice? = null
@@ -65,6 +72,9 @@ class CameraFragment : Fragment() {
         textureView.let {
             it.surfaceTextureListener = textureListener
         }
+
+        progressBar = view.findViewById(R.id.progressBar)
+
         takePictureButton = view.findViewById(R.id.take_picture_button)
         takePictureButton.setOnClickListener {
             takePicture()
@@ -175,8 +185,20 @@ class CameraFragment : Fragment() {
     }
 
     private fun takePicture() {
+        progressBar.visibility = VISIBLE
         lock()
-        cameraViewModel.takePicture(textureView.bitmap)
+        cameraViewModel
+                .takePicture(textureView.bitmap)
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribeOn(Schedulers.io())
+                .subscribe { saved ->
+                    progressBar.visibility = GONE
+                    if (saved) {
+                        NavHostFragment
+                                .findNavController(this)
+                                .navigate(R.id.action_cameraFragment_to_previewFragment)
+                    }
+                }
         unlock()
     }
 

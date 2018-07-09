@@ -4,6 +4,7 @@ import android.arch.lifecycle.ViewModel
 import android.graphics.Bitmap
 import android.os.Environment
 import android.util.Log
+import io.reactivex.Single
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -17,18 +18,27 @@ class CameraViewModel : ViewModel() {
     }
 
     private var galleryFolder: File? = null
+    private var picture: Bitmap? = null
 
-    fun takePicture(bitmap: Bitmap) {
+    fun takePicture(bitmap: Bitmap): Single<Boolean> {
+        picture = bitmap
         createImageGallery()
         var outputFile: FileOutputStream? = null
-        try {
-            outputFile = FileOutputStream(createImageFile(galleryFolder))
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputFile)
-        } catch (e: Exception) {
-            Log.e(LOG_TAG, "takePicture: error while saving picture", e)
-        } finally {
-            outputFile?.close()
+        return Single.create { emitter ->
+            try {
+                outputFile = FileOutputStream(createImageFile(galleryFolder))
+                emitter.onSuccess(bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputFile))
+            } catch (e: Exception) {
+                emitter.onError(e)
+                Log.e(LOG_TAG, "takePicture: error while saving picture", e)
+            } finally {
+                outputFile?.close()
+            }
         }
+    }
+
+    fun getPicture(): Bitmap?{
+        return picture
     }
 
 
