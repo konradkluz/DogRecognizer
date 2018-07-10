@@ -57,7 +57,7 @@ class CameraFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        cameraViewModel = ViewModelProviders.of(this).get(CameraViewModel::class.java)
+        cameraViewModel = ViewModelProviders.of(activity!!).get(CameraViewModel::class.java)
 
         orientationEventListener =
                 MyOrientationEventListener(context, SensorManager.SENSOR_DELAY_NORMAL) { rotation: Float -> rotateButton(rotation) }
@@ -130,8 +130,10 @@ class CameraFragment : Fragment() {
 
     private fun openCamera() {
         if (ActivityCompat.checkSelfPermission(context!!, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
-                ActivityCompat.checkSelfPermission(context!!, android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(android.Manifest.permission.CAMERA, android.Manifest.permission.WRITE_EXTERNAL_STORAGE), PERMISSIONS_REQUEST_CODE)
+                ActivityCompat.checkSelfPermission(context!!, android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED ||
+                ActivityCompat.checkSelfPermission(context!!, android.Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.CAMERA, android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                    android.Manifest.permission.READ_EXTERNAL_STORAGE), PERMISSIONS_REQUEST_CODE)
             return
         }
 
@@ -180,25 +182,21 @@ class CameraFragment : Fragment() {
         }
     }
 
-    private fun rotateButton(deg: Float) {
-        takePictureButton.animate().rotation(deg).interpolator = AccelerateDecelerateInterpolator()
-    }
-
     private fun takePicture() {
         progressBar.visibility = VISIBLE
         lock()
-        cameraViewModel
-                .takePicture(textureView.bitmap)
-                .observeOn(AndroidSchedulers.mainThread())
-                .subscribeOn(Schedulers.io())
-                .subscribe { saved ->
-                    progressBar.visibility = GONE
-                    if (saved) {
-                        NavHostFragment
-                                .findNavController(this)
-                                .navigate(R.id.action_cameraFragment_to_previewFragment)
+        cameraViewModel.takePicture(textureView.bitmap).let {
+            it.observeOn(AndroidSchedulers.mainThread())
+                    .subscribeOn(Schedulers.io())
+                    .subscribe { saved ->
+                        progressBar.visibility = GONE
+                        if (saved) {
+                            NavHostFragment
+                                    .findNavController(this)
+                                    .navigate(R.id.action_cameraFragment_to_previewFragment)
+                        }
                     }
-                }
+        }
         unlock()
     }
 
@@ -218,6 +216,9 @@ class CameraFragment : Fragment() {
         }
     }
 
+    private fun rotateButton(deg: Float) {
+        takePictureButton.animate().rotation(deg).interpolator = AccelerateDecelerateInterpolator()
+    }
 
 // endregion
 

@@ -17,12 +17,11 @@ class CameraViewModel : ViewModel() {
         private const val DIRECTORY_NAME = "DogRecogniser"
     }
 
-    private var galleryFolder: File? = null
-    private var picture: Bitmap? = null
+    private var pictureSingle: Single<Bitmap>? = null
 
     fun takePicture(bitmap: Bitmap): Single<Boolean> {
-        picture = bitmap
-        createImageGallery()
+        pictureSingle = Single.just(bitmap)
+        val galleryFolder = createImageGallery()
         var outputFile: FileOutputStream? = null
         return Single.create { emitter ->
             try {
@@ -37,22 +36,19 @@ class CameraViewModel : ViewModel() {
         }
     }
 
-    fun getPicture(): Bitmap?{
-        return picture
+    fun pictureSingle(): Single<Bitmap>? {
+        return pictureSingle
     }
 
 
-    private fun createImageGallery() {
+    private fun createImageGallery(): File {
         val storageDirectory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-        galleryFolder = File(storageDirectory, DIRECTORY_NAME)
-        var created = false
+        val galleryFolder = File(storageDirectory, DIRECTORY_NAME)
 
-        if (!galleryFolder?.exists()!!) {
-            created = galleryFolder?.mkdirs()!!
+        if (!galleryFolder.exists()) {
+            galleryFolder.mkdirs()
         }
-        if (created) {
-            println(created)
-        }
+        return galleryFolder
     }
 
     private fun createImageFile(galleryFile: File?): File {
