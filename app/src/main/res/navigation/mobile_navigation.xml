@@ -3,6 +3,17 @@
             xmlns:tools="http://schemas.android.com/tools" app:startDestination="@id/cameraFragment">
 
 <fragment android:id="@+id/cameraFragment"
-          android:name="com.konradkluz.dogrecognizer.CameraFragment"
-          android:label="CameraFragment"/>
+          android:name="com.konradkluz.dogrecognizer.ui.CameraFragment"
+          android:label="CameraFragment">
+    <action
+        android:id="@+id/action_cameraFragment_to_previewFragment"
+        app:destination="@id/previewFragment"
+        />
+</fragment>
+    <fragment
+        android:id="@+id/previewFragment"
+        android:name="com.konradkluz.dogrecognizer.ui.PreviewFragment"
+        android:label="fragment_preview"
+        tools:layout="@layout/fragment_preview">
+    </fragment>
 </navigation>
