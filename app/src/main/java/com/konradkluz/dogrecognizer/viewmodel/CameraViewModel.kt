@@ -1,23 +1,52 @@
 package com.konradkluz.dogrecognizer.viewmodel
 
-import android.arch.lifecycle.ViewModel
+import android.app.Application
+import android.arch.lifecycle.AndroidViewModel
+import android.arch.lifecycle.Lifecycle
+import android.arch.lifecycle.LifecycleObserver
+import android.arch.lifecycle.OnLifecycleEvent
 import android.graphics.Bitmap
 import android.os.Environment
+import android.text.SpannableStringBuilder
 import android.util.Log
+import com.konradkluz.dogrecognizer.service.ImageClassifier
+import io.reactivex.Observable
 import io.reactivex.Single
+import io.reactivex.subjects.BehaviorSubject
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
-class CameraViewModel : ViewModel() {
+class CameraViewModel(application: Application) : AndroidViewModel(application), LifecycleObserver {
 
     companion object {
         private const val LOG_TAG = "CameraViewModel"
         private const val DIRECTORY_NAME = "DogRecogniser"
     }
 
+
+    private var imageClassifier: ImageClassifier? = null
     private var pictureSingle: Single<Bitmap>? = null
+    private var breedTextSubject: BehaviorSubject<String>? = BehaviorSubject.create()
+
+    @OnLifecycleEvent(Lifecycle.Event.ON_CREATE)
+    fun dddd() {
+        imageClassifier = ImageClassifier(getApplication<Application>()).apply {
+            this.setUseNNAPI(true)
+        }
+    }
+
+    @OnLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+    fun destroy() {
+        imageClassifier?.close()
+    }
+
+    fun classifyFrame(picture: Bitmap) {
+        imageClassifier?.recognizeImage(picture)?.let {
+            it.subscribe{result -> breedTextSubject?.onNext(result[0].title!!)}
+        }
+    }
 
     fun takePicture(bitmap: Bitmap): Single<Boolean> {
         pictureSingle = Single.just(bitmap)
@@ -40,6 +69,9 @@ class CameraViewModel : ViewModel() {
         return pictureSingle
     }
 
+    fun breedTextSubject(): BehaviorSubject<String>?{
+        return breedTextSubject
+    }
 
     private fun createImageGallery(): File {
         val storageDirectory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
